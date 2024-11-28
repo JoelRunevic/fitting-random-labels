@@ -97,7 +97,6 @@ class WideResNet(nn.Module):
         variance = math.sqrt(2.0/(fan_in + fan_out))
         m.weight.data.normal_(0.0, init_scale * variance)
 
-
   def forward(self, x):
     out = self.forward_repr(x)
     return self.fc(out)
@@ -111,4 +110,35 @@ class WideResNet(nn.Module):
     out = F.avg_pool2d(out, 8)
     out = out.view(-1, self.nChannels)
     return out
+  
+  def compute_frobenius_statistics(self):
+    """
+    Compute the log of the product of Frobenius norms for conv layers, linear layers, and both combined.
+    Returns:
+        stats (dict): A dictionary containing:
+            - 'conv': Log of the product of Frobenius norms of convolutional layers.
+            - 'linear': Log of the product of Frobenius norms of linear layers.
+            - 'combined': Log of the product of Frobenius norms of both conv and linear layers.
+    """
+    log_fro_conv = 0.0
+    log_fro_linear = 0.0
+    log_fro_combined = 0.0
 
+    for module in self.modules():
+        if isinstance(module, nn.Conv2d):
+            weight = module.weight.data
+            norm = torch.norm(weight, p='fro')
+            log_fro_conv += torch.log(norm).item()
+            log_fro_combined += torch.log(norm).item()
+        elif isinstance(module, nn.Linear):
+            weight = module.weight.data
+            norm = torch.norm(weight, p='fro')
+            log_fro_linear += torch.log(norm).item()
+            log_fro_combined += torch.log(norm).item()
+
+    stats = {
+        'conv': log_fro_conv,
+        'linear': log_fro_linear,
+        'combined': log_fro_combined
+    }
+    return stats
