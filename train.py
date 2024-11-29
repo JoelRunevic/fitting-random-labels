@@ -1,5 +1,4 @@
 from __future__ import print_function
-
 import os
 import logging
 import csv
@@ -12,14 +11,13 @@ import torch.backends.cudnn as cudnn
 import torch.optim
 
 from cifar10_data import CIFAR10RandomLabels
-
 import cmd_args
 import model_mlp, model_wideresnet
 
 
 def get_data_loaders(args, shuffle_train=True):
     if args.data == 'cifar10':
-        normalize = transforms.Normalize(mean=[x/255.0 for x in [125.3, 123.0, 113.9]],
+        normalize = transforms.Normalize(mean=[x / 255.0 for x in [125.3, 123.0, 113.9]],
                                          std=[x / 255.0 for x in [63.0, 62.1, 66.7]])
 
         if args.data_augmentation:
@@ -44,12 +42,14 @@ def get_data_loaders(args, shuffle_train=True):
         train_loader = torch.utils.data.DataLoader(
             CIFAR10RandomLabels(root='./data', train=True, download=True,
                                 transform=transform_train, num_classes=args.num_classes,
-                                corrupt_prob=args.label_corrupt_prob),
+                                corrupt_prob=args.label_corrupt_prob,
+                                transform_mode=args.transform_mode),
             batch_size=args.batch_size, shuffle=shuffle_train, **kwargs)
         val_loader = torch.utils.data.DataLoader(
             CIFAR10RandomLabels(root='./data', train=False,
                                 transform=transform_test, num_classes=args.num_classes,
-                                corrupt_prob=args.label_corrupt_prob),
+                                corrupt_prob=args.label_corrupt_prob,
+                                transform_mode=args.transform_mode),
             batch_size=args.batch_size, shuffle=False, **kwargs)
 
         return train_loader, val_loader
@@ -66,7 +66,7 @@ def get_model(args):
     elif args.arch == 'mlp':
         n_units = [int(x) for x in args.mlp_spec.split('x')]  # hidden dims
         n_units.append(args.num_classes)  # output dim
-        n_units.insert(0, 32*32*3)        # input dim
+        n_units.insert(0, 32 * 32 * 3)    # input dim
         model = model_mlp.MLP(n_units)
 
     model = model.cuda()
@@ -80,8 +80,8 @@ def train_model(args, model, train_loader, val_loader, save_dir, start_epoch=Non
     # Define loss function and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
     optimizer = torch.optim.SGD(model.parameters(), args.learning_rate,
-                                momentum=args.momentum,
-                                weight_decay=args.weight_decay)
+                                 momentum=args.momentum,
+                                 weight_decay=args.weight_decay)
 
     start_epoch = start_epoch or 0
     epochs = epochs or args.epochs
@@ -93,8 +93,7 @@ def train_model(args, model, train_loader, val_loader, save_dir, start_epoch=Non
     # Write CSV header
     with open(stats_file, mode='w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['epoch', 'train_loss', 'train_acc', 'val_loss', 'val_acc', 
-                         'log_rho_conv', 'log_rho_linear', 'log_rho_combined'])
+        writer.writerow(['epoch', 'train_loss', 'train_acc', 'val_loss', 'val_acc'])
 
     for epoch in range(start_epoch, epochs):
         adjust_learning_rate(optimizer, epoch, args)
@@ -105,22 +104,13 @@ def train_model(args, model, train_loader, val_loader, save_dir, start_epoch=Non
         # Evaluate on validation set
         val_loss, val_prec1 = validate_epoch(val_loader, model, criterion, epoch, args)
 
-        # Compute Frobenius norm statistics
-        frobenius_stats = model.compute_frobenius_statistics()
-        log_rho_conv = frobenius_stats['conv']
-        log_rho_linear = frobenius_stats['linear']
-        log_rho_combined = frobenius_stats['combined']
-
         # Log and save statistics
-        logging.info('%03d: Acc-tr: %6.2f, Acc-val: %6.2f, L-tr: %6.4f, L-val: %6.4f, '
-                     'log_rho_conv: %.4f, log_rho_linear: %.4f, log_rho_combined: %.4f',
-                     epoch, tr_prec1, val_prec1, tr_loss, val_loss,
-                     log_rho_conv, log_rho_linear, log_rho_combined)
+        logging.info('%03d: Acc-tr: %6.2f, Acc-val: %6.2f, L-tr: %6.4f, L-val: %6.4f',
+                     epoch, tr_prec1, val_prec1, tr_loss, val_loss)
 
         with open(stats_file, mode='a', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow([epoch, tr_loss, tr_prec1, val_loss, val_prec1,
-                             log_rho_conv, log_rho_linear, log_rho_combined])
+            writer.writerow([epoch, tr_loss, tr_prec1, val_loss, val_prec1])
 
         # Save model checkpoint
         model_path = os.path.join(save_dir, f'model_epoch_{epoch}.pth')

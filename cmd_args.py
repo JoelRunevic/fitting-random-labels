@@ -8,6 +8,11 @@ parser.add_argument('--num-classes', type=int, default=10)
 parser.add_argument('--data-augmentation', type=bool, default=False)
 parser.add_argument('--label-corrupt-prob', type=float, default=0.0)
 
+# New argument for transformation mode
+parser.add_argument('--transform-mode', default='none', 
+                    choices=['none', 'shuffled_pixels', 'random_pixels', 'gaussian'],
+                    help='Transformation mode for dataset.')
+
 parser.add_argument('--batch-size', type=int, default=128)
 parser.add_argument('--epochs', type=int, default=300)
 parser.add_argument('--learning-rate', type=float, default=0.1)
@@ -53,6 +58,10 @@ def format_experiment_name(args):
     name += '_NoWd'
   if not args.data_augmentation:
     name += '_NoAug'
+
+  # Include transform mode in the experiment name
+  if args.transform_mode != 'none':
+    name += f'_{args.transform_mode}'
 
   return name
 
